@@ -8,6 +8,7 @@ import java.util.Map.Entry;
 import java.util.Random;
 import java.util.Set;
 
+import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
@@ -35,6 +36,7 @@ public class MeetingRoom extends JavaPlugin implements Listener {
 	public void onEnable() {
 		saveDefaultConfig();
 		ConfigurationSerialization.registerClass(Room.class);
+		ConfigurationSerialization.registerClass(SerializableLocation.class);
 		getServer().getPluginManager().registerEvents(this, this);
 
 		data = new ConfigAccessor(this, "data.yml");
@@ -104,7 +106,7 @@ public class MeetingRoom extends JavaPlugin implements Listener {
 					final Room r = new Room(id, defaultRoomName, player.getDisplayName());
 
 					roomBlocks.put(targeted.getLocation().hashCode(), r);
-					r.setInitialBlock(targeted);
+					r.setInitialBlock(targeted.getLocation());
 					addBlockToRoom(targeted, r);
 					refreshPlayers();
 				} else {
@@ -119,11 +121,13 @@ public class MeetingRoom extends JavaPlugin implements Listener {
 		Player player = e.getPlayer();
 		if(MetadataManipulator.getMetadata(player, "meetingroom", this) != null && MetadataManipulator.getMetadata(player, "meetingroom", this) != "") {
 			Room room = roomBlocks.get(player.getLocation().getBlock().getLocation().hashCode());
-			if(room.getOwner() == player.getDisplayName()) {
+			if(room.getOwner().equals(player.getDisplayName())) {
 				if(e.getLine(0).equals("[meetingroom]")) {
 					getLogger().info("Room set!");
 					room.setName(e.getLine(1));
 				}
+			} else {
+				player.sendMessage("You are not the owner of this meeting room.");
 			}
 		}
 	}
@@ -191,8 +195,9 @@ public class MeetingRoom extends JavaPlugin implements Listener {
 
 	private void scanRoom(Room r) {
 		removeRoom(r, false);
-		roomBlocks.put(r.getInitialBlock().getLocation().hashCode(), r);
-		addBlockToRoom(r.getInitialBlock(), r);
+		Location loc = r.getInitialBlock();
+		roomBlocks.put(loc.hashCode(), r);
+		addBlockToRoom(loc.getWorld().getBlockAt(r.getInitialBlock()), r);
 		refreshPlayers();
 	}
 
@@ -201,8 +206,11 @@ public class MeetingRoom extends JavaPlugin implements Listener {
 		for(Room r : roomBlocks.values()) {
 			if(!uniqueRooms.contains(r)) {
 				uniqueRooms.add(r);
-				scanRoom(r);
 			}
+		}
+		
+		for(Room u : uniqueRooms) {
+			scanRoom(u);
 		}
 	}
 
