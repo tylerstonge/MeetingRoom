@@ -96,7 +96,7 @@ public class MeetingRoom extends JavaPlugin implements Listener {
 
 		if((e.getAction() == Action.LEFT_CLICK_BLOCK || e.getAction() == Action.RIGHT_CLICK_BLOCK) && e.hasItem() && e.hasBlock()) {
 			Block targeted = e.getClickedBlock().getRelative(e.getBlockFace().getOppositeFace());
-			if(e.getItem().getType() == meetingRoomCatalyst && e.getClickedBlock().getType() == Material.WOODEN_DOOR && targeted.getType() == Material.AIR) {
+			if(e.getItem().getType() == meetingRoomCatalyst && isSupportedDoor(e.getClickedBlock().getType()) && targeted.getType() == Material.AIR) {
 				if(!roomBlocks.containsKey(targeted.getLocation().hashCode())) {
 					Player player = e.getPlayer();
 					player.getInventory().getItemInHand().setAmount(player.getInventory().getItemInHand().getAmount() - 1);
@@ -146,6 +146,13 @@ public class MeetingRoom extends JavaPlugin implements Listener {
 		refreshPlayers();
 	}
 
+	private boolean isSupportedDoor(Material m) {
+		if(m == Material.ACACIA_DOOR || m == Material.WOODEN_DOOR || m == Material.SPRUCE_DOOR || m == Material.DARK_OAK_DOOR 
+				|| m == Material.JUNGLE_DOOR || m == Material.BIRCH_DOOR)
+			return true;
+		return false;
+	}
+	
 	private void addBlockToRoom(Block t, final Room r) {
 		if(roomBlocks.size() > maxRoomSize) {
 			// Stop this madness
