@@ -3,6 +3,7 @@ package io.github.tylerstonge.meetingroom;
 import java.util.HashMap;
 import java.util.Map;
 
+import org.bukkit.block.Block;
 import org.bukkit.configuration.serialization.ConfigurationSerializable;
 
 public class Room implements ConfigurationSerializable {
@@ -10,11 +11,14 @@ public class Room implements ConfigurationSerializable {
 	private String id;
 	private String name;
 	private String owner;
+	private Block initialBlock;
+	private boolean delete;
 	
 	public Room(String id, String name, String owner) {
 		this.id = id;
 		this.name = name;
 		this.owner = owner;
+		this.delete = false;
 	}
 	
 	public Room(Map<String, Object> map) {
@@ -31,6 +35,14 @@ public class Room implements ConfigurationSerializable {
 		return id;
 	}
 
+	public void markForDeletion() {
+		this.delete = true;
+	}
+	
+	public boolean isMarkedForDeletion() {
+		return this.delete;
+	}
+	
 	public String getName() {
 		return name;
 	}
@@ -46,7 +58,14 @@ public class Room implements ConfigurationSerializable {
 	public void setOwner(String owner) {
 		this.owner = owner;
 	}
+	
+	public Block getInitialBlock() {
+		return initialBlock;
+	}
 
+	public void setInitialBlock(Block initialBlock) {
+		this.initialBlock = initialBlock;
+	}
 	@Override
 	public Map<String, Object> serialize() {
 		Map<String, Object> map = new HashMap<String, Object>();
@@ -55,7 +74,4 @@ public class Room implements ConfigurationSerializable {
 		map.put("owner", owner);
 		return map;
 	}
-	
-	
-	
 }

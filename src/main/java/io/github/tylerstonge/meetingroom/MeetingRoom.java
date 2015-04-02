@@ -1,6 +1,7 @@
 package io.github.tylerstonge.meetingroom;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -15,7 +16,6 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
-import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.SignChangeEvent;
 import org.bukkit.event.player.AsyncPlayerChatEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
@@ -26,8 +26,8 @@ public class MeetingRoom extends JavaPlugin implements Listener {
 
 	HashMap<Integer, Room> roomBlocks = new HashMap<Integer, Room>();
 	String defaultRoomName = "Room";
-	Material meetingRoomMaterial = Material.OBSIDIAN;
 	Material meetingRoomCatalyst = Material.DIAMOND;
+	int maxRoomSize = 400;
 
 	ConfigAccessor data;
 
@@ -39,9 +39,10 @@ public class MeetingRoom extends JavaPlugin implements Listener {
 
 		data = new ConfigAccessor(this, "data.yml");
 		loadRoomBlocks();
-
-		meetingRoomMaterial = Material.getMaterial(getConfig().getString("material"));
+		scanAllRooms();
+		
 		meetingRoomCatalyst = Material.getMaterial(getConfig().getString("catalyst"));
+		maxRoomSize = getConfig().getInt("maxsize");
 		refreshPlayers();
 	}
 
@@ -56,8 +57,8 @@ public class MeetingRoom extends JavaPlugin implements Listener {
 			return;
 
 		Player player = e.getPlayer();
-		Block dest = e.getTo().getBlock().getRelative(BlockFace.DOWN);
-		Block org = e.getFrom().getBlock().getRelative(BlockFace.DOWN);
+		Block dest = e.getTo().getBlock();
+		Block org = e.getFrom().getBlock();
 
 		if(!roomBlocks.containsKey(org.getLocation().hashCode()) && roomBlocks.containsKey(dest.getLocation().hashCode())) {
 			// Entering meeting room.
@@ -82,10 +83,9 @@ public class MeetingRoom extends JavaPlugin implements Listener {
 			String id = MetadataManipulator.getMetadata(orig, "meetingroom", this);
 			for(Player dest : e.getRecipients()) {
 				if(MetadataManipulator.getMetadata(dest, "meetingroom", this).equals(id)) {
-					dest.sendMessage("["+orig.getName()+"->"+roomBlocks.get(orig.getLocation().getBlock().getRelative(BlockFace.DOWN).getLocation().hashCode()).getName()+"] "+e.getMessage());
+					dest.sendMessage("["+orig.getName()+"->"+roomBlocks.get(orig.getLocation().getBlock().getLocation().hashCode()).getName()+"] "+e.getMessage());
 				}
 			}
-			getLogger().info("MESSAGE SENT: "+e.getMessage()+ "RECIPIENTS: "+e.getRecipients()+"ROOM: "+MetadataManipulator.getMetadata(orig, "meetingroom", this));
 		}
 	}
 
@@ -93,17 +93,23 @@ public class MeetingRoom extends JavaPlugin implements Listener {
 	public void onPlayerInteract(PlayerInteractEvent e) {
 
 		if((e.getAction() == Action.LEFT_CLICK_BLOCK || e.getAction() == Action.RIGHT_CLICK_BLOCK) && e.hasItem() && e.hasBlock()) {
-			Block targeted = e.getClickedBlock();
-			if(e.getItem().getType() == meetingRoomCatalyst && targeted.getType() == meetingRoomMaterial && !roomBlocks.containsKey(targeted.getLocation().hashCode())) {
-				Player player = e.getPlayer();
-				player.getInventory().getItemInHand().setAmount(player.getInventory().getItemInHand().getAmount() - 1);
-				
-				Random rand = new Random();
-				String id = Integer.toString(rand.nextInt(1000000));
-				final Room r = new Room(id, defaultRoomName, player.getDisplayName());
-				roomBlocks.put(targeted.getLocation().hashCode(), r);
-				addBlockToRoom(targeted, r);
-				refreshPlayers();
+			Block targeted = e.getClickedBlock().getRelative(e.getBlockFace().getOppositeFace());
+			if(e.getItem().getType() == meetingRoomCatalyst && e.getClickedBlock().getType() == Material.WOODEN_DOOR && targeted.getType() == Material.AIR) {
+				if(!roomBlocks.containsKey(targeted.getLocation().hashCode())) {
+					Player player = e.getPlayer();
+					player.getInventory().getItemInHand().setAmount(player.getInventory().getItemInHand().getAmount() - 1);
+
+					Random rand = new Random();
+					String id = Integer.toString(rand.nextInt(1000000));
+					final Room r = new Room(id, defaultRoomName, player.getDisplayName());
+
+					roomBlocks.put(targeted.getLocation().hashCode(), r);
+					r.setInitialBlock(targeted);
+					addBlockToRoom(targeted, r);
+					refreshPlayers();
+				} else {
+					scanRoom(roomBlocks.get(targeted.getLocation().hashCode()));
+				}
 			}
 		}
 	}
@@ -112,7 +118,7 @@ public class MeetingRoom extends JavaPlugin implements Listener {
 	public void onSignPlaced(SignChangeEvent e) {
 		Player player = e.getPlayer();
 		if(MetadataManipulator.getMetadata(player, "meetingroom", this) != null && MetadataManipulator.getMetadata(player, "meetingroom", this) != "") {
-			Room room = roomBlocks.get(player.getLocation().getBlock().getRelative(BlockFace.DOWN).getLocation().hashCode());
+			Room room = roomBlocks.get(player.getLocation().getBlock().getLocation().hashCode());
 			if(room.getOwner() == player.getDisplayName()) {
 				if(e.getLine(0).equals("[meetingroom]")) {
 					getLogger().info("Room set!");
@@ -122,52 +128,87 @@ public class MeetingRoom extends JavaPlugin implements Listener {
 		}
 	}
 
-	@EventHandler
-	public void onBlockBreak(BlockBreakEvent e) {
-		Block target = e.getBlock();
-		if(roomBlocks.containsKey(target.getLocation().hashCode())) {
-			String toDelete = roomBlocks.get(target.getLocation().hashCode()).getId();
-			Iterator<Map.Entry<Integer, Room>> iter = roomBlocks.entrySet().iterator();
-			while(iter.hasNext()) {
-				Entry<Integer, Room> entry = iter.next();
-				if(toDelete.equals(entry.getValue().getId()))
-					iter.remove();
-			}
+	@SuppressWarnings("deprecation")
+	public void removeRoom(Room r, boolean displayError) {
+		Iterator<Map.Entry<Integer, Room>> iter = roomBlocks.entrySet().iterator();
+		String toDelete = r.getId();
+		while(iter.hasNext()) {
+			Entry<Integer, Room> entry = iter.next();
+			if(toDelete.equals(entry.getValue().getId()))
+				iter.remove();
 		}
+		if(displayError)
+			this.getServer().getPlayer(r.getOwner()).sendMessage("This room is not enclosed, or exceeds maximum size.");
 		refreshPlayers();
 	}
 
 	private void addBlockToRoom(Block t, final Room r) {
+		if(roomBlocks.size() > maxRoomSize) {
+			// Stop this madness
+			r.markForDeletion();
+			removeRoom(r, true);
+			return;
+		}
+
 		Block nextBlock = null;
 
 		nextBlock = t.getRelative(BlockFace.NORTH);
-		if(nextBlock.getType() == meetingRoomMaterial && !roomBlocks.containsKey(nextBlock.getLocation().hashCode())) {
+		if(nextBlock.getType() == Material.AIR && !roomBlocks.containsKey(nextBlock.getLocation().hashCode()) && !r.isMarkedForDeletion()) {
 			roomBlocks.put(nextBlock.getLocation().hashCode(), r);
 			addBlockToRoom(nextBlock, r);
 		}
 
 		nextBlock = t.getRelative(BlockFace.SOUTH);
-		if(nextBlock.getType() == meetingRoomMaterial && !roomBlocks.containsKey(nextBlock.getLocation().hashCode())) {
+		if(nextBlock.getType() == Material.AIR && !roomBlocks.containsKey(nextBlock.getLocation().hashCode()) && !r.isMarkedForDeletion()) {
 			roomBlocks.put(nextBlock.getLocation().hashCode(), r);
 			addBlockToRoom(nextBlock, r);
 		}
 
 		nextBlock = t.getRelative(BlockFace.EAST);
-		if(nextBlock.getType() == meetingRoomMaterial && !roomBlocks.containsKey(nextBlock.getLocation().hashCode())) {
+		if(nextBlock.getType() == Material.AIR && !roomBlocks.containsKey(nextBlock.getLocation().hashCode()) && !r.isMarkedForDeletion()) {
 			roomBlocks.put(nextBlock.getLocation().hashCode(), r);
 			addBlockToRoom(nextBlock, r);
 		}
 
 		nextBlock = t.getRelative(BlockFace.WEST);
-		if(nextBlock.getType() == meetingRoomMaterial && !roomBlocks.containsKey(nextBlock.getLocation().hashCode())) {
+		if(nextBlock.getType() == Material.AIR && !roomBlocks.containsKey(nextBlock.getLocation().hashCode()) && !r.isMarkedForDeletion()) {
+			roomBlocks.put(nextBlock.getLocation().hashCode(), r);
+			addBlockToRoom(nextBlock, r);
+		}
+
+		nextBlock = t.getRelative(BlockFace.DOWN);
+		if(nextBlock.getType() == Material.AIR && !roomBlocks.containsKey(nextBlock.getLocation().hashCode()) && !r.isMarkedForDeletion()) {
+			roomBlocks.put(nextBlock.getLocation().hashCode(), r);
+			addBlockToRoom(nextBlock, r);
+		}
+
+		nextBlock = t.getRelative(BlockFace.UP);
+		if(nextBlock.getType() == Material.AIR && !roomBlocks.containsKey(nextBlock.getLocation().hashCode()) && !r.isMarkedForDeletion()) {
 			roomBlocks.put(nextBlock.getLocation().hashCode(), r);
 			addBlockToRoom(nextBlock, r);
 		}
 	}
-	
+
+	private void scanRoom(Room r) {
+		removeRoom(r, false);
+		roomBlocks.put(r.getInitialBlock().getLocation().hashCode(), r);
+		addBlockToRoom(r.getInitialBlock(), r);
+		refreshPlayers();
+	}
+
+	private void scanAllRooms() {
+		Set<Room> uniqueRooms = new HashSet<Room>();
+		for(Room r : roomBlocks.values()) {
+			if(!uniqueRooms.contains(r)) {
+				uniqueRooms.add(r);
+				scanRoom(r);
+			}
+		}
+	}
+
 	private void refreshPlayers() {
 		for(Player p : this.getServer().getOnlinePlayers()) {
-			Integer hash = p.getLocation().getBlock().getRelative(BlockFace.DOWN).getLocation().hashCode();
+			Integer hash = p.getLocation().getBlock().getLocation().hashCode();
 			if(roomBlocks.containsKey(hash)) {
 				MetadataManipulator.setMetadata(p, "meetingroom", hash, this);
 			} else {
