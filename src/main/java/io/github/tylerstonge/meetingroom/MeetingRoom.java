@@ -132,7 +132,6 @@ public class MeetingRoom extends JavaPlugin implements Listener {
 		}
 	}
 
-	@SuppressWarnings("deprecation")
 	public void removeRoom(Room r, boolean displayError) {
 		Iterator<Map.Entry<Integer, Room>> iter = roomBlocks.entrySet().iterator();
 		String toDelete = r.getId();
