@@ -9,7 +9,8 @@ To use this plugin create a floor of a single material (Default: Obsidian) where
 To rename your room from the default "Room" create a sign with line 1 as **[meetingroom]** and on the 2nd line put the name of your room. The sign can be removed after.
 
 ## Configuration
-material: OBSIDIAN    (Floor material)
+```
+material: OBSIDIAN   (Floor material)
 catalyst: DIAMOND    (Item to use to initialize meeting room)
-
-The materials must be the properly formatted name from the material enum list, located [here](https://hub.spigotmc.org/javadocs/bukkit/org/bukkit/Material.html)
+```
+The materials must be the properly formatted name from the material enum list, located [here](https://hub.spigotmc.org/javadocs/bukkit/org/bukkit/Material.html) and entered into the [config.yml](https://github.com/tylerstonge/MeetingRoom/blob/master/src/main/resources/config.yml) file.
